@@ -311,6 +311,7 @@ def initialize() {
     // Initialize as if we haven't checked in more than fanAdjustMinutes
     atomicState.lastAdjustmentTime = now() // - (60001 * fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event    
     subscribe(theThermostat, "thermostatOperatingState", modeOrProgramHandler)		// so we can see when the fan runs
+    
     if (thePrograms) subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
     // subscribe(theThermostat, "thermostatHold", modeOrProgramHandler)
     // subscribe(location, "routineExecuted", modeOrProgramHandler)    
@@ -318,11 +319,15 @@ def initialize() {
     if (statModes) subscribe(theThermostat, "thermostatMode", modeOrProgramHandler)
     
     if (settings.quietSwitches) {
+    
+    	LOG("Registering switch.${qtOn} as quietOnHandler", 3, null, 'info')
     	subscribe(quietSwitches, "switch.${qtOn}", quietOnHandler)
-        def qtOff = settings.qtOn == 'on' ? 'off' : 'on'
-        subscribe(quietSwitches, "switch.${off}", quietOffHandler)
-        atomicState.quietNow = (settings.quietSwitches.currentSwitch.contains(settings.qtOn)) ? true : false
+        def qtOff = qtOn == 'on' ? 'off' : 'on'
+    	LOG("Registering switch.${qtOff} as quietOffHandler", 3, null, 'info')
+        subscribe(quietSwitches, "switch.${qtOff}", quietOffHandler)
+        atomicState.quietNow = (settings.quietSwitches.currentSwitch.contains(qtOn)) ? true : false
     } else {
+    	LOG("No Quiet time switches registered", 3, null, 'info')
     	atomicState.quietNow = false
     }
     
@@ -449,7 +454,7 @@ def initialize() {
 }
 
 def quietOnHandler(evt) {
-	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
+	LOG("quietOnHandler: Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
 	if (!atomicState.quietNow) {
     	atomicState.quietNow = true
 		Integer fanOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
@@ -465,7 +470,7 @@ def quietOnHandler(evt) {
 }
 
 def quietOffHandler(evt) {
-	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
+	LOG("quietOffHandler: Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
     // NOTE: Quiet time will release its circOff reservation and set circulation time to whatever it was
     if (atomicState.quietNow) {
     	if (!settings.quietSwitches.currentSwitch.contains(settings.qtOn)) {
@@ -848,15 +853,20 @@ void updateMyLabel() {
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
+    
     def minutes = (atomicState.circMinutes != -1) ? atomicState.circMinutes : (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true))
+    
     String newLabel
 	if (settings.tempDisable) {
+    
 		newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
-	} else if (atomicState.minutes == 'quiet time') {
+	} else if (atomicState.minutes == 'quiet time' || minutes == 'quiet time') {
+    
 		newLabel = myLabel + ( ST ? ' (quiet time)' : '<span style="color:green"> (quiet time)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (minutes > -1) { 
+    
     	minutes = ' (min/hr: ' + minutes + ')'
 		newLabel = myLabel + ( ST ? minutes : '<span style="color:green">' + minutes + '</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
@@ -864,7 +874,7 @@ void updateMyLabel() {
     else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
-    //log.debug "newLabel: " + newLabel + ", myLabel: " + myLabel + ", app.label: " + app.label
+    log.debug "newLabel: " + newLabel + ", myLabel: " + myLabel + ", app.label: " + app.label
 }
 def pauseOn(global = false) {
 	// Pause this Helper
